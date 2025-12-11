@@ -73,8 +73,8 @@ with col1:
                     with st.status("Creating creative story...", expanded=True) as status:
                         story = story_pipe(
                             f"Tell a short creative story about this {emotion_pred} person",
-                            max_length=100,
-                            max_new_tokens=100,
+                            max_length=500,
+                            max_new_tokens=500,
                             do_sample=True,
                             temperature=0.8
                         )

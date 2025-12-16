@@ -1,143 +1,140 @@
 import streamlit as st
 from transformers import pipeline
 from PIL import Image
-import io
+import tempfile
+import os
 
 # Set page configuration
 st.set_page_config(
-    page_title="Emotion Detection & Story Generator",
+    page_title="Emotion Detection App",
     page_icon="😊",
     layout="wide"
 )
 
 # Title and description
-st.title("😊 Emotion Detection using Facial Emotion Recognition")
-st.markdown("---")
+st.title("😊 Emotion Detection & Story Generator")
+st.markdown("""
+This app detects emotions from facial expressions and generates a story based on the detected emotion.
+Upload an image of a person's face to get started!
+""")
 
 # Sidebar for information
 with st.sidebar:
-    st.header("About")
+    st.header("ℹ️ About")
     st.markdown("""
-    This app uses:
-    1. **LaiMein/Facial-Emotion-Recognition** - For detecting emotions from facial expressions
-    2. **GPT-2** - For generating creative stories based on detected emotions
+    **Models Used:**
+    1. **Emotion Detection:** LaiMein/Facial-Emotion-Recognition
+    2. **Story Generation:** openai-community/gpt2-xl
     
-    Upload an image of a face to detect the emotion and generate a story!
+    **How it works:**
+    1. Upload a facial image
+    2. The app detects the primary emotion
+    3. A story is generated based on that emotion
     """)
-    st.markdown("---")
-    st.markdown("**Note:** The models will be downloaded on first run (this may take a few minutes)")
+    
+    st.divider()
+    st.caption("Note: Processing may take a moment for the first run as models download.")
 
-# Main content area
-col1, col2 = st.columns([1, 1])
+# Initialize session state for models
+@st.cache_resource
+def load_emotion_model():
+    """Load the emotion detection model"""
+    return pipeline("image-classification", model="LaiMein/Facial-Emotion-Recognition")
+
+@st.cache_resource
+def load_story_model():
+    """Load the story generation model"""
+    return pipeline("text-generation", model="openai-community/gpt2-xl")
+
+# File uploader
+uploaded_file = st.file_uploader(
+    "Upload a facial image",
+    type=['jpg', 'jpeg', 'png'],
+    help="Upload an image containing a face for emotion detection"
+)
+
+# Create two columns for layout
+col1, col2 = st.columns(2)
 
 with col1:
-    st.header("📤 Upload Image")
-    
-    # Image uploader
-    uploaded_file = st.file_uploader(
-        "Choose an image file",
-        type=['jpg', 'jpeg', 'png', 'bmp'],
-        help="Upload an image containing a face for emotion detection"
-    )
-    
-    # Display uploaded image
     if uploaded_file is not None:
+        # Display the uploaded image
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Uploaded Image", use_column_width=True)
+        st.image(image, caption="Uploaded Image", use_container_width=True)
         
-        # Display image info
-        st.info(f"**Image details:** {image.size[0]}×{image.size[1]} pixels | Mode: {image.mode}")
-        
-        # Process button
-        if st.button("🔍 Detect Emotion & Generate Story", type="primary", use_container_width=True):
-            with st.spinner("Analyzing image and generating story..."):
-                try:
-                    # Initialize emotion detection pipeline
-                    with st.status("Loading emotion detection model...", expanded=True) as status:
-                        emotion_pipe = pipeline("image-classification", model="LaiMein/Facial-Emotion-Recognition")
-                        status.update(label="✅ Emotion detection model loaded!", state="complete")
-                    
-                    # Detect emotion
-                    with st.status("Detecting emotion from image...", expanded=True) as status:
-                        emotion_pred = emotion_pipe(image)[0]['label'].lower()
-                        status.update(label=f"✅ Emotion detected: **{emotion_pred.upper()}**", state="complete")
-                    
-                    # Display emotion result
-                    st.success(f"**Detected Emotion:** {emotion_pred.upper()}")
-                    
-                    # Generate story
-                    with st.status("Generating story based on emotion...", expanded=True) as status:
-                        story_pipe = pipeline("text-generation", model="openai-community/gpt2")
-                        status.update(label="✅ Story generator model loaded!", state="complete")
-                    
-                    with st.status("Creating creative story...", expanded=True) as status:
-                        story = story_pipe(
-                            f"Tell a short creative story about this {emotion_pred} person",
-                            max_length=500,
-                            max_new_tokens=500,
-                            do_sample=True,
-                            temperature=0.8
-                        )
-                        status.update(label="✅ Story generated successfully!", state="complete")
-                    
-                    # Display story in col2
-                    with col2:
-                        st.header("📖 Generated Story")
-                        st.markdown("---")
-                        st.markdown(f"**Based on the emotion:** _{emotion_pred}_")
-                        st.markdown("---")
-                        
-                        # Create a nice container for the story
-                        story_container = st.container()
-                        with story_container:
-                            st.markdown("### 📝 The Story:")
-                            st.write(story[0]['generated_text'])
-                        
-                        # Add download button for the story
-                        story_text = story[0]['generated_text']
-                        st.download_button(
-                            label="📥 Download Story as Text",
-                            data=story_text,
-                            file_name=f"story_{emotion_pred}.txt",
-                            mime="text/plain",
-                            use_container_width=True
-                        )
+        # Add a process button
+        process_btn = st.button("🎭 Detect Emotion & Generate Story", type="primary")
+
+with col2:
+    if uploaded_file is not None and 'process_btn' in locals() and process_btn:
+        with st.spinner("Loading models and processing..."):
+            try:
+                # Load models
+                emotion_pipe = load_emotion_model()
+                story_pipe = load_story_model()
                 
-                except Exception as e:
-                    st.error(f"An error occurred: {str(e)}")
-                    st.info("Please try again or use a different image.")
+                # Detect emotion
+                with st.status("Detecting emotion...", expanded=True) as status:
+                    emotion_pred = emotion_pipe(image)[0]['label'].lower()
+                    status.update(label=f"✅ Emotion detected: **{emotion_pred.upper()}**", state="complete")
+                
+                # Display emotion result
+                st.subheader(f"Detected Emotion: **{emotion_pred.upper()}**")
+                
+                # Generate story
+                with st.status("Generating story...", expanded=True) as status:
+                    story = story_pipe(
+                        f"Tell a story about this {emotion_pred} person",
+                        max_length=500,
+                        min_length=200,
+                        max_new_tokens=500,
+                        do_sample=True,
+                        temperature=0.8,
+                        top_p=0.9
+                    )
+                    status.update(label="✅ Story generated!", state="complete")
+                
+                # Display story
+                st.subheader("📖 Generated Story")
+                story_text = story[0]['generated_text']
+                
+                # Format the story with better readability
+                formatted_story = story_text.replace(f"Tell a story about this {emotion_pred} person", "").strip()
+                if formatted_story:
+                    st.write(formatted_story)
+                else:
+                    st.write(story_text)
+                
+                # Add download button for the story
+                st.download_button(
+                    label="📥 Download Story",
+                    data=story_text,
+                    file_name=f"emotion_story_{emotion_pred}.txt",
+                    mime="text/plain"
+                )
+                
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+                st.info("Please try again or upload a different image.")
+    
+    elif uploaded_file is not None:
+        st.info("Click the button to process the image and generate a story.")
     
     else:
-        # Show placeholder when no image is uploaded
-        st.info("👆 Please upload an image to get started")
-        
-        # Display sample image or instructions
-        with col2:
-            st.header("📖 How it Works")
-            st.markdown("""
-            1. **Upload** an image containing a face
-            2. **Click** the 'Detect Emotion & Generate Story' button
-            3. **View** the detected emotion and generated story
-            
-            The app will:
-            - Analyze facial expressions using AI
-            - Detect the primary emotion
-            - Generate a creative story based on that emotion
-            
-            **Example emotions detected:**
-            - 😊 Happy
-            - 😢 Sad  
-            - 😠 Angry
-            - 😲 Surprised
-            - 😐 Neutral
-            - 😨 Fearful
-            """)
+        st.info("👈 Please upload an image to get started")
+
+# Add some styling
+st.markdown("""
+<style>
+    .stButton button {
+        width: 100%;
+    }
+    .stStatus {
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: #666;'>"
-    "Powered by 🤗 Transformers | Built with Streamlit"
-    "</div>",
-    unsafe_allow_html=True
-)
+st.divider()
+st.caption("Built with Streamlit and Hugging Face Transformers | Emotion Detection & Story Generation")

@@ -179,7 +179,7 @@ with col2:
                     with story_container:
                         st.markdown(f"""
                         <div style='
-                            background-color: #f8f9fa;
+                            background-color: #000000;
                             padding: 20px;
                             border-radius: 10px;
                             border-left: 5px solid #4CAF50;
